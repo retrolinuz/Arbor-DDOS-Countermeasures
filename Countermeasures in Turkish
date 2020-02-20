@@ -1,0 +1,75 @@
+PER-PACKET COUNTERMEASURES
+
+Invalid Packets
+Gelen trafiğin geçerli birer IP paketi olup olmadığı kontrol edilir. En azından temel IP header niteliklerini taşınıyor olması gerekir. Bu CM disable edilemez, her zaman geçerlidir.
+
+IP Address Filter Lists
+İlk sırada dikkate alınan CM’dir. Önceden belirlenmiş tehlikeli IP’ler CIDR veya tekil IP adresi olarak girilebilir. Eğer bu CM ile bir eşleşme olursa, diğer CM’ler artık dikkate alınmaz.
+
+Black / White Lists
+IP Address Filter Lists’e benzer şekilde filtreleme yapmak için kullanılır. Ancak kullanılan değer IP adresi değil FCAP ifadeleridir.  IP/TCP/UDP/ICMP header’ları  eşleştirilerek filtreleme yapılabilir, dolayısıyla BW Lists, IP Address Filter Lists’ten daha fazla işlemci gücü harcar.
+
+IP Location Filter Lists
+IP adreslerinin kaynağı olan ülke bazında yapılan filtrelemedir. DDOS atağının kaynağı belirli bir ülkeye ait IP’ler ise, bu CM kullanılarak o ülkeden gelen tüm trafik engellenebilir. Ülkelerin IP adres blokları sistemde gömülüdür ve PeakFlow SP ile görülemez ve değiştirilemez.
+
+Zombie Detection
+Zombie Detection ile amaç, bot bulaşmış host’lardan gelen ve geri yanıt beklemeyen, sürekli  istekleri saptayıp engellemektir.  Bu istekler arasında TCP SYN gibi bilinen yaygın ataklar da olabilir; ancak zombie detection CM’nin önceliği bir host’un gönderebileceği maksimum datayı değerlendirerek trafik limitleme yapmaktır.
+
+TCP SYN Authentication
+Aktif edilirse, bir host’tan gelen ilk TCP SYN paketine hedef IP değil, araya girerek Arbor cevap verir ve uygun bir SYN-ACK paketi gönderir. Eğer host, Arbor’ın gönderdiği SYN-ACK’in sequence number’ını bir artırmış olarak, yani uygun bir ACK paketi ile cevap dönerse Arbor host’u gerçek kabul eder ve RST-ACK paketi göndererek 3way handshake’i resetler. Bu durumda host tekrar 3way handshake’i başlatacaktır ve bu sefer Arbor araya girmeyecektir.
+
+HTTP Aunthentication
+TCP SYN Authentication’dan sonra, eğer paket bir HTTP paketiyse Arbor gelen isteğe RST göndermez ve geçerli bir HTTP GET isteği bekler. HTTP GET’i alırsa, isteği sahte bir URL’ye “redirect” eder. Böyle bir durumda gerçek bir istemcinin bu yönlendirilmiş URL’ye yeni bir bağlantı açması beklenir. Eğer TMS, kaynağın böyle bir yeni istekte bulunduğunu görürse onu geçerli olarak işaretler ve yeni bir yönlendirme yaparak kaynağı istekte bulunduğu gerçek URL’ye gönderir.
+
+DNS Authentication
+Gelen bir DNS isteğinin gerçek bir istek olup olmadığını kontrol eder. Üç yöntemi vardır:
+Passive:
+Gelen ilk DNS isteğini drop eder. Eğer ikinci DNS isteği aynı şekilde ve beklenilen zaman dilimi içinde gelirse kabul edilir. Rastgele isimler için ya da spoof edilmiş IP Adreslerinden yapılan sorgular için idealdir.
+UDP Active Mode
+Bu modda TMS, UDP port 53’ten gelen DNS isteğine spoof edilmiş bir cevap gönderir. Bu cevapta, sorgusu yapılan domain’in NS’i yerinde sahte bir NS’e yönlendirme yapılır. Bu sahte NS’in ismi aslında bir cookie hash’tir. Eğer istek gönderen kaynak geçerli bir istekte bulunuyorsa, bu NS’is ismini çözebilmek için yeni bir istekte bulunacaktır. Eğer TMS aynı kaynatan bu cookie hash ismi için bir DNS sorgusu geldiğini görürse, kaynağı geçerli sayar ve sonraki DNS isteklerini engellemez.
+TCP Active Mode
+Bu modda, UDP 53’ten gelen isteğe TMS, DNS Truncate bitini set ederek cevap gönderir. Geçerli bir DNS istemcisi bu durumda aynı isteği TCP 53 üzerinden göndermelidir. Dolayısıyla TMS eğer aynı isteği aynı kaynaktan TCP 53 portu ile alırsa kaynağı geçerli olarak işaretler ve herhangi bir engelleme yapmaz.
+
+Payload Regular Expression Filtering (Payload Regex)
+Gelen paketlerin payload’larına REGEX filtreleri uygulamak yoluyla çalışır. Birçok application layer atağı, payload’daki sabit bir ifadenin filtrelenmesi ile engellenebilir.
+
+Baseline Enforcements
+Belirlenen subnet’lerden ya da protokollerden gelen ve daha önce Peakflow tarafından belirlenmiş olağan değerlerin çok üzerindeki trafiğin filtrelenmesidir. İki tip baseline enforcement vardır: Bandwidth ve protokol tabanlı. İkisi de Peakflow’un daha önce kaydettiği verileri baz alır.
+
+Shaping (Rate Limiting)
+Trafiğin, Peakflow’un saptadığı değerler üzerinden değil, yöneticinin girdiği filtrelet üzerinden limitlendiği bir CM’dir. Shaping, değerlendirilmesi gereken son CM olmalıdır çünkü trafiği geçerli veya geçersiz ayırt etmeksizin filtreler.
+
+
+APPLICATION-SPECIFIC COUNTERMEASURES
+
+TCP Connection Reset (Idle Reset)
+Açık duran ama uzun süredir herhangi bir işlem yapmamış TCP bağlantılarını kapatmakta kullanılır. TCP Reset isteği “hedef” host’a gönderilir. Dolayısıyla kaynağın, yani muhtemel saldirganın engellemeden haberi olmaz.
+
+Malformed DNS Filtering
+Gelen DNS paketlerinin geçerli olup olmadığını kontrol eder. Eğer DNS paketi payload taşımıyorsa drop edilir. Bu CM ile geçersiz veya boş gönderilmiş DNS paketleri engellenmiş olur.
+
+DNS Rate Limiting
+Belirli bir kaynaktan gelen DNS trafiğinin Peakflow’un belirlediği değerlerin üzerine çıkmasını engelleyen bir CM’dir. Eğer DNS query mesajları beklenin çok üzerindeyse, kaynak bir dakika boyunca bloklanır.
+
+DNS NXDOMAIN Rate Limiting
+Bir kaynağın var olmayan domain’ler için gönderdiği DNS query isteklerini limitlemek için kullanılır. Nameserver’ları geçerli ama gerekesiz isim sorgularından korumak için idealdir. Default değerler idealdir.
+
+DNS Regular Expression Filtering and DNS Filter Lists
+DNS Domain Filtering, içinde belirli bir domain adı geçen DNS paketlerini filtrelemekte kullanılır. Bu DNS CM’i, bir paket geçerli bir DNS sorgusu olarak kabul edildikten sonra işleme konulur.
+Regular Expression’ın Domain Filtering’den tek farkı filtrelemeyi regular expression formatında yapıyor olmasıdır. Bu sayede çok daha esnek filtremeler yapılabilir.
+
+Malformed HTTP Filtering
+HTTP mesajlarının geçerli bir formatta olup olmadığını kontrol eder. HTTP header’ı incelenir ve RFC2616 uyumluluğu sorgulanır. Eğer standarta uygun değilse drop edilir. En çok karşılaşılan atak şekli boş HTTP istekleridir.
+
+HTTP Object and Request Rate Limiting
+HTTP Rate Limiting ile belirli bir kaynaktan gelen HTTP mesajlarının sayısı sınırlandırılır. Object Limiting ise HTTP sunucusundan yapılacak istekeleri sınırlamada kullanılır. Her ikisi de gelen bir HTTP paketinin geçerli olarak işaretlenmesinin ardından devreye girer.
+
+HTTP Header Regular Expression Filtering and URL Filter Lists
+Belirli bir URL’yi ya da belirlenen bir Regular Expression’ı içeren HTTP paketlerinin filtrelenmesini sağlar. DNS örneğinde olduğu gibi RE’li filtreme çok daha esnek bir filtrelemeye olanak tanıyacaktır. Atak tool’ları tarafından otomatize edilen HTTP atakları için idealdir.
+
+Malformed SIP Filtering
+SIP paketlerinin geçerli olup olmadığını kontrol eder. İki modülden oluşur. İlk modül SIP mesajının UDP 5060 portuna gelip gelmediğine bakar, ardından da paketin bir payload’u olup olmadığını kontrol eder. Payload yok ise paket drop edilir, kaynak bir dakika süresince bloklanır.  Eğer SIP paketi ilk modülü geçmişse bu durumda paketin header’ı incelenir ve geçerli bir header olup olmadığı kontrol edilir (RFC 3261).
+
+SIP Source Rate Limiting
+Gelen SIP mesajlarının belirli bir seviyede tutularak aşırı SIP trafiğinin önüne geçilir. Bu limitleme ancak SIP paketi geçerli bir paket olarak işaretlenmişse yapılır. Eğer SIP trafiği belirlenen değerlerin çok üzerindeyse trafik drop edilir ve kaynak bir dakika süreyle bloklanır.
+
